@@ -33,9 +33,85 @@
 #import <YouTubeHeader/YTShortsPlayerViewController.h>
 #import <YouTubeHeader/YTWatchController.h>
 
+// Texture layout types that YouTubeHeader does not declare. The encodings
+// were verified against YouTube 21.33.6: setHeight:/setMargin: take
+// {?=qd}-based structs, setFlexWrap: takes an int, and setAlignItems: takes an
+// unsigned char.
+typedef NS_ENUM(NSInteger, ASDimensionUnit) {
+    ASDimensionUnitAuto,
+    ASDimensionUnitPoints,
+    ASDimensionUnitFraction,
+};
+
+typedef struct {
+    ASDimensionUnit unit;
+    CGFloat value;
+} ASDimension;
+
+typedef struct {
+    ASDimension top, left, bottom, right, start, end, horizontal, vertical, all;
+} ASEdgeInsets;
+
+typedef NS_ENUM(int, ASStackLayoutFlexWrap) {
+    ASStackLayoutFlexWrapNoWrap,
+    ASStackLayoutFlexWrapWrap,
+};
+
+typedef NS_ENUM(uint8_t, ASStackLayoutAlignItems) {
+    ASStackLayoutAlignItemsStart,
+    ASStackLayoutAlignItemsEnd,
+    ASStackLayoutAlignItemsCenter,
+    ASStackLayoutAlignItemsStretch,
+    ASStackLayoutAlignItemsBaselineFirst,
+    ASStackLayoutAlignItemsBaselineLast,
+    ASStackLayoutAlignItemsNotSet,
+};
+
+@interface ASLayoutElementStyleYoga (RYDMetadata)
+@property (nonatomic, assign) ASDimension height;
+@property (nonatomic, assign) ASEdgeInsets margin;
+@property (nonatomic, assign) ASStackLayoutFlexWrap flexWrap;
+@property (nonatomic, assign) ASStackLayoutAlignItems alignItems;
+@end
+
+@interface RYDMetadataState : NSObject
+@property (nonatomic, copy) NSString *videoID;
+@property (nonatomic, copy) NSString *dislikes;
+@property (nonatomic, copy) NSString *originalText;
+@property (nonatomic, copy) NSString *renderedText;
+@property (nonatomic, copy) NSAttributedString *originalAttributedText;
+@property (nonatomic, copy) NSAttributedString *tailOriginalAttributedText;
+@property (nonatomic, copy) NSAttributedString *tailRenderedAttributedText;
+@property (nonatomic, weak) ELMCellNode *cell;
+@property (nonatomic, weak) YTRollingNumberNode *likeNode;
+@property (nonatomic, weak) ELMTextNode *textNode;
+@property (nonatomic, weak) ELMTextNode *tailTextNode;
+@property (nonatomic, weak) ASDisplayNode *container;
+@property (nonatomic, weak) ASDisplayNode *row;
+@property (nonatomic, weak) ASDisplayNode *separatorNode;
+@property (nonatomic, weak) ASDisplayNode *tail;
+@property (nonatomic, strong) NSMapTable<ASDisplayNode *, NSValue *> *fixedHeights;
+@property (nonatomic, assign) ASStackLayoutFlexWrap originalWrap;
+@property (nonatomic, assign) ASStackLayoutAlignItems originalAlignItems;
+@property (nonatomic, assign) ASEdgeInsets originalSeparatorMargin;
+@property (nonatomic, assign) CGFloat originalTailShrink;
+@property (nonatomic, assign) NSUInteger originalMaximumNumberOfLines;
+@property (nonatomic, assign) BOOL layoutApplied;
+@end
+
+@interface ELMCellNode (RYDMetadata)
+@property (nonatomic, strong) RYDMetadataState *rydMetadata;
+@end
+
+@interface ELMTextNode (RYDMetadata)
+@property (nonatomic, strong) RYDMetadataState *rydMetadata;
+@property (nonatomic, assign) NSUInteger maximumNumberOfLines;
+@end
+
 @interface YTRollingNumberNode (RYD)
 @property (strong, nonatomic) NSString *updatedCount;
 @property (strong, nonatomic) NSNumber *updatedCountNumber;
+@property (strong, nonatomic) RYDMetadataState *rydMetadata;
 - (void)updateCount:(NSString *)updateCount color:(UIColor *)color;
 @end
 

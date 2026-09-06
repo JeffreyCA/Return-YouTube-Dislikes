@@ -17,6 +17,9 @@ NSString *localizedDislikeText = nil;
 
 extern NSBundle *RYDBundle();
 
+@implementation RYDMetadataState
+@end
+
 %hook YTReelWatchLikesController
 
 - (void)updateLikeButtonWithRenderer:(YTILikeButtonRenderer *)renderer {
@@ -136,19 +139,13 @@ __strong NSMutableAttributedString *mutableDislikeText = nil;
 
 static NSString *getVideoId(ASDisplayNode *containerNode) {
     UIViewController *vc = [containerNode closestViewController];
-    if (![vc isKindOfClass:%c(YTWatchNextResultsViewController)]) {
-        UIViewController *parentViewController;
-        do {
-            parentViewController = vc.parentViewController;
-            if ([parentViewController isKindOfClass:%c(YTWatchViewController)]) {
-                vc = parentViewController;
-                break;
-            }
-            vc = parentViewController;
-        } while (parentViewController);
-        if ([parentViewController isKindOfClass:%c(YTWatchViewController)])
-            return [parentViewController valueForKeyPath:@"_videoID"];
+    for (UIViewController *parent = vc; parent; parent = parent.parentViewController) {
+        if ([parent isKindOfClass:%c(YTWatchViewController)]) {
+            NSString *videoID = [parent valueForKey:@"_videoID"];
+            if (videoID.length) return videoID;
+        }
     }
+    if (![vc isKindOfClass:%c(YTWatchNextResultsViewController)]) return nil;
     YTPlayerViewController *pvc;
     NSObject *wc;
     @try {
@@ -192,6 +189,273 @@ static void getVoteAndModifyButtons(
     });
 }
 
+static void setRollingNumberText(YTRollingNumberView *view, NSString *text, NSNumber *number, UIColor *color) {
+    color = color ?: view.color;
+    if ([view respondsToSelector:@selector(setUpdatedCount:updatedCountNumber:font:fontAttributes:color:skipAnimation:)])
+        [view setUpdatedCount:text updatedCountNumber:number font:view.font fontAttributes:view.fontAttributes color:color skipAnimation:YES];
+    else
+        [view setUpdatedCount:text updatedCountNumber:number font:view.font color:color skipAnimation:YES];
+}
+
+static NSString *metadataDislikeText(RYDMetadataState *state) {
+    NSString *format = [RYDBundle() localizedStringForKey:@"DISLIKES_COUNT_FORMAT"
+        value:[NSString stringWithFormat:@"%%@ %@", localizedDislikeText] table:nil];
+    return [NSString stringWithFormat:format, state.dislikes];
+}
+
+static void updateMetadataRollingNumber(YTRollingNumberNode *node) {
+    RYDMetadataState *state = node.rydMetadata;
+    if (!state) return;
+    YTRollingNumberView *view = [node valueForKey:@"_rollingNumberView"];
+    if (![view.updatedCount isEqualToString:state.renderedText])
+        state.originalText = view.updatedCount;
+    if (!TweakEnabled() || !state.dislikes) {
+        if ([view.updatedCount isEqualToString:state.renderedText])
+            setRollingNumberText(view, state.originalText, view.updatedCountNumber, nil);
+        state.renderedText = nil;
+        return;
+    }
+    if (!state.originalText.length) return;
+    // Native statistics are separated by two spaces, so match that instead of a dot.
+    state.renderedText = [NSString stringWithFormat:@"%@  %@", state.originalText, metadataDislikeText(state)];
+    // The native update reuses digit views from the right and may still be
+    // rolling the trailing digits toward the like count. Drop those views first
+    // so the appended dislike digits cannot finish someone else's animation.
+    setRollingNumberText(view, @"", view.updatedCountNumber, nil);
+    setRollingNumberText(view, state.renderedText, view.updatedCountNumber, nil);
+}
+
+static void updateMetadataTextNode(ELMTextNode *node) {
+    RYDMetadataState *state = node.rydMetadata;
+    if (!state || state.textNode != node) return;
+    if (![node.attributedText.string isEqualToString:state.renderedText])
+        state.originalAttributedText = node.attributedText;
+    if (!TweakEnabled() || !state.dislikes) {
+        if ([node.attributedText.string isEqualToString:state.renderedText])
+            node.attributedText = state.originalAttributedText;
+        state.renderedText = nil;
+        return;
+    }
+    NSAttributedString *original = state.originalAttributedText;
+    NSRange separator = [original.string rangeOfString:@"\\s{2,}" options:NSRegularExpressionSearch];
+    if (!original.length || separator.location == NSNotFound || separator.location == 0) {
+        HBLogDebug(@"RYD: Unsupported metadata text separators");
+        return;
+    }
+    NSMutableAttributedString *updated = original.mutableCopy;
+    // Keep each statistic together while allowing breaks at the field separators.
+    for (NSUInteger index = 1; index + 1 < original.length; index++) {
+        if ([original.string characterAtIndex:index] == ' ' &&
+            [original.string characterAtIndex:index - 1] != ' ' &&
+            [original.string characterAtIndex:index + 1] != ' ')
+            [updated replaceCharactersInRange:NSMakeRange(index, 1) withString:@" "];
+    }
+    NSDictionary *attributes = [original attributesAtIndex:separator.location - 1 effectiveRange:nil];
+    NSString *countText = [metadataDislikeText(state) stringByReplacingOccurrencesOfString:@" " withString:@" "];
+    NSAttributedString *dislikes = [[NSAttributedString alloc]
+        initWithString:[NSString stringWithFormat:@"  %@", countText] attributes:attributes];
+    [updated insertAttributedString:dislikes atIndex:separator.location];
+    state.renderedText = updated.string;
+    node.attributedText = updated;
+}
+
+static NSRange metadataLeadingWhitespace(NSAttributedString *text) {
+    return [text.string rangeOfString:@"^\\s+" options:NSRegularExpressionSearch];
+}
+
+// The age/"...more" text starts with the whitespace that separates it from the
+// views counter. That whitespace becomes an end margin on the counter instead
+// (see applyMetadataLayout), so a wrapped line starts flush with the likes.
+static void updateMetadataTail(ELMTextNode *node) {
+    RYDMetadataState *state = node.rydMetadata;
+    if (!state || state.tailTextNode != node) return;
+    if (![node.attributedText isEqualToAttributedString:state.tailRenderedAttributedText])
+        state.tailOriginalAttributedText = node.attributedText;
+    if (!TweakEnabled() || !state.dislikes) {
+        if ([node.attributedText isEqualToAttributedString:state.tailRenderedAttributedText])
+            node.attributedText = state.tailOriginalAttributedText;
+        state.tailRenderedAttributedText = nil;
+        return;
+    }
+    NSMutableAttributedString *text = state.tailOriginalAttributedText.mutableCopy;
+    NSRange leading = metadataLeadingWhitespace(text);
+    if (!text || leading.location == NSNotFound) return;
+    [text deleteCharactersInRange:leading];
+    state.tailRenderedAttributedText = text;
+    if (![node.attributedText isEqualToAttributedString:text])
+        node.attributedText = text;
+}
+
+static CGFloat metadataSeparatorWidth(RYDMetadataState *state) {
+    NSAttributedString *text = state.tailOriginalAttributedText ?: state.tailTextNode.attributedText;
+    NSRange leading = metadataLeadingWhitespace(text);
+    if (leading.location == NSNotFound) return 0;
+    return ceil([[text attributedSubstringFromRange:leading] size].width);
+}
+
+static ASDisplayNode *metadataCounterNode(ASDisplayNode *node) {
+    NSArray<ASDisplayNode *> *children = node.yogaChildren;
+    // This metadata component groups the likes counter, views counter, and age/more text.
+    if (children.count == 3 &&
+        [children[0] isKindOfClass:%c(YTRollingNumberNode)] &&
+        [children[1] isKindOfClass:%c(YTRollingNumberNode)] &&
+        [children[2] isKindOfClass:%c(ELMContainerNode)])
+        return children[0];
+    // Non-live statistics use a single styled text node after the channel handle.
+    if (children.count == 2 &&
+        [children[0] isKindOfClass:%c(ELMTextNode)] &&
+        [children[1] isKindOfClass:%c(ELMTextNode)])
+        return children[1];
+    for (ASDisplayNode *child in children) {
+        ASDisplayNode *counter = metadataCounterNode(child);
+        if (counter) return counter;
+    }
+    return nil;
+}
+
+// The template pins the statistics rows to a fixed 16-point height and centers
+// the channel handle in them. Letting those rows size to their content is what
+// makes the cell measure tall enough for a second line; the collection view
+// then picks the new height up through the node's own layout.
+static void applyMetadataLayout(RYDMetadataState *state) {
+    if (state.layoutApplied) return;
+    state.layoutApplied = YES;
+    state.fixedHeights = [NSMapTable weakToStrongObjectsMapTable];
+    for (ASDisplayNode *node = state.container; node && node != state.cell; node = node.yogaParent) {
+        ASDimension height = node.style.height;
+        if (height.unit == ASDimensionUnitAuto) continue;
+        [state.fixedHeights setObject:[NSValue valueWithBytes:&height objCType:@encode(ASDimension)] forKey:node];
+        node.style.height = (ASDimension){ASDimensionUnitAuto, 0};
+    }
+    state.originalAlignItems = state.row.style.alignItems;
+    state.row.style.alignItems = ASStackLayoutAlignItemsStart;
+    state.originalWrap = state.container.style.flexWrap;
+    state.originalTailShrink = state.tail.style.flexShrink;
+    state.originalSeparatorMargin = state.separatorNode.style.margin;
+    if (state.likeNode) {
+        state.container.style.flexWrap = ASStackLayoutFlexWrapWrap;
+        state.tail.style.flexShrink = 0;
+        CGFloat separator = metadataSeparatorWidth(state);
+        if (separator > 0) {
+            ASEdgeInsets margin = state.originalSeparatorMargin;
+            margin.end = (ASDimension){ASDimensionUnitPoints, separator};
+            state.separatorNode.style.margin = margin;
+        }
+    }
+}
+
+static void restoreMetadataLayout(RYDMetadataState *state) {
+    if (!state.layoutApplied) return;
+    state.layoutApplied = NO;
+    for (ASDisplayNode *node in state.fixedHeights) {
+        ASDimension height;
+        [[state.fixedHeights objectForKey:node] getValue:&height];
+        node.style.height = height;
+    }
+    state.fixedHeights = nil;
+    state.row.style.alignItems = state.originalAlignItems;
+    state.container.style.flexWrap = state.originalWrap;
+    state.tail.style.flexShrink = state.originalTailShrink;
+    state.separatorNode.style.margin = state.originalSeparatorMargin;
+}
+
+static void restoreMetadataState(RYDMetadataState *state) {
+    restoreMetadataLayout(state);
+    state.dislikes = nil;
+    updateMetadataRollingNumber(state.likeNode);
+    state.likeNode.rydMetadata = nil;
+    updateMetadataTail(state.tailTextNode);
+    state.tailTextNode.rydMetadata = nil;
+    if (state.textNode) {
+        state.textNode.maximumNumberOfLines = state.originalMaximumNumberOfLines;
+        updateMetadataTextNode(state.textNode);
+        state.textNode.rydMetadata = nil;
+    }
+    [state.cell setNeedsLayout];
+}
+
+static void configureMetadataCount(ELMCellNode *cell) {
+    RYDMetadataState *previous = cell.rydMetadata;
+    if (!TweakEnabled()) {
+        if (previous) {
+            restoreMetadataState(previous);
+            cell.rydMetadata = nil;
+        }
+        return;
+    }
+    ASDisplayNode *counter = metadataCounterNode(cell);
+    if (!counter) {
+        HBLogDebug(@"RYD: Unsupported video metadata counter layout");
+        return;
+    }
+    NSString *videoID = getVideoId(cell);
+    if (!videoID.length) {
+        HBLogDebug(@"RYD: Video metadata has no active video ID yet");
+        return;
+    }
+    if ([previous.videoID isEqualToString:videoID] &&
+        (previous.likeNode == counter || previous.textNode == counter)) return;
+    if (previous) restoreMetadataState(previous);
+    RYDMetadataState *state = [RYDMetadataState new];
+    state.videoID = videoID;
+    state.cell = cell;
+    state.container = counter.yogaParent;
+    cell.rydMetadata = state;
+    if ([counter isKindOfClass:%c(YTRollingNumberNode)]) {
+        NSArray<ASDisplayNode *> *siblings = state.container.yogaChildren;
+        state.likeNode = (YTRollingNumberNode *)counter;
+        state.likeNode.rydMetadata = state;
+        state.row = state.container.yogaParent;
+        state.separatorNode = siblings[siblings.count - 2];
+        state.tail = siblings.lastObject;
+        ASDisplayNode *tailText = state.tail.yogaChildren.firstObject;
+        if ([tailText isKindOfClass:%c(ELMTextNode)]) {
+            state.tailTextNode = (ELMTextNode *)tailText;
+            state.tailTextNode.rydMetadata = state;
+        }
+    } else {
+        state.textNode = (ELMTextNode *)counter;
+        state.row = state.container;
+        state.originalMaximumNumberOfLines = state.textNode.maximumNumberOfLines;
+        state.textNode.rydMetadata = state;
+    }
+    __weak ELMCellNode *weakCell = cell;
+    getVoteFromVideoWithHandler(cache, videoID, maxRetryCount, ^(NSDictionary *data, NSString *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            ELMCellNode *currentCell = weakCell;
+            if (!currentCell || currentCell.rydMetadata != state || !TweakEnabled() ||
+                ![getVideoId(currentCell) isEqualToString:videoID]) return;
+            NSNumber *number = getDislikeData(data);
+            if (error || ![number isKindOfClass:NSNumber.class]) {
+                HBLogDebug(@"RYD: Could not load metadata dislikes for %@: %@", videoID, error ?: @"missing count");
+                return;
+            }
+            state.dislikes = getNormalizedDislikes(number, nil);
+            updateMetadataTail(state.tailTextNode);
+            applyMetadataLayout(state);
+            if (state.likeNode) {
+                updateMetadataRollingNumber(state.likeNode);
+                [state.likeNode relayoutNode];
+            } else {
+                state.textNode.maximumNumberOfLines = 2;
+                updateMetadataTextNode(state.textNode);
+                [state.textNode setNeedsLayout];
+            }
+            [currentCell setNeedsLayout];
+        });
+    });
+}
+
+static void configureVisibleMetadataCell(ELMCellNode *cell) {
+    if (![[[cell.controller owningComponent] templateURI] hasPrefix:@"video_metadata_inner.eml"]) return;
+    __weak ELMCellNode *weakCell = cell;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        ELMCellNode *currentCell = weakCell;
+        if (currentCell.isNodeLoaded && currentCell.view.window)
+            configureMetadataCount(currentCell);
+    });
+}
+
 static YTCommonColorPalette *currentColorPalette() {
     Class YTPageStyleControllerClass = %c(YTPageStyleController);
     if (YTPageStyleControllerClass)
@@ -224,6 +488,11 @@ static void setTextColor(NSMutableAttributedString *text) {
 
 - (ELMCellNode *)nodeForItemAtIndexPath:(NSIndexPath *)indexPath {
     ELMCellNode *node = %orig;
+    if ([node isKindOfClass:%c(ELMCellNode)] &&
+        [[[node.controller owningComponent] templateURI] hasPrefix:@"video_metadata_inner.eml"]) {
+        configureMetadataCount(node);
+        return node;
+    }
     if (!TweakEnabled()) return node;
     if (self.isProbablyVideoDescriptionHeaderPanel && isVideoDescriptionHeader(self, node)) {
         NSString *videoId = getVideoId(node);
@@ -590,10 +859,47 @@ static void layoutActionBar(YTReelWatchPlaybackOverlayView *self) {
 
 %end
 
+%hook ELMCellNode
+
+%property (nonatomic, strong) RYDMetadataState *rydMetadata;
+
+- (void)didEnterHierarchy {
+    %orig;
+    configureVisibleMetadataCell(self);
+}
+
+- (void)layoutDidFinish {
+    %orig;
+    configureVisibleMetadataCell(self);
+}
+
+%end
+
+%hook ELMTextNode
+
+%property (nonatomic, strong) RYDMetadataState *rydMetadata;
+
+- (void)updateAttributedText {
+    %orig;
+    updateMetadataTextNode(self);
+    updateMetadataTail(self);
+}
+
+// Later responses for the same watch page reuse the node tree and reset the
+// text through setElement: without going through updateAttributedText.
+- (void)setElement:(ELMElement *)element {
+    %orig;
+    updateMetadataTextNode(self);
+    updateMetadataTail(self);
+}
+
+%end
+
 %hook YTRollingNumberNode
 
 %property (strong, nonatomic) NSString *updatedCount;
 %property (strong, nonatomic) NSNumber *updatedCountNumber;
+%property (strong, nonatomic) RYDMetadataState *rydMetadata;
 
 - (id)initWithElement:(id)element context:(id)context {
     self = %orig;
@@ -608,18 +914,17 @@ static void layoutActionBar(YTReelWatchPlaybackOverlayView *self) {
     %orig;
     if (self.updatedCount && self.updatedCountNumber)
         [self updateCount:self.updatedCount color:nil];
+    updateMetadataRollingNumber(self);
 }
 
 %new(v@:@@)
 - (void)updateCount:(NSString *)updatedCount_ color:(UIColor *)color_ {
     YTRollingNumberView *view = [self valueForKey:@"_rollingNumberView"];
-    UIFont *font = view.font;
-    UIColor *color = color_ ?: view.color;
     NSString *updatedCount = [NSString stringWithFormat:@" %@", updatedCount_];
-    if ([view respondsToSelector:@selector(setUpdatedCount:updatedCountNumber:font:fontAttributes:color:skipAnimation:)])
-        [view setUpdatedCount:updatedCount updatedCountNumber:self.updatedCountNumber font:font fontAttributes:view.fontAttributes color:color skipAnimation:YES];
-    else
-        [view setUpdatedCount:updatedCount updatedCountNumber:self.updatedCountNumber font:font color:color skipAnimation:YES];
+    // See updateMetadataRollingNumber: the native update that just ran may still
+    // be rolling reused digit views toward the like count.
+    setRollingNumberText(view, @"", self.updatedCountNumber, color_);
+    setRollingNumberText(view, updatedCount, self.updatedCountNumber, color_);
 }
 
 %end
@@ -655,6 +960,7 @@ static void layoutActionBar(YTReelWatchPlaybackOverlayView *self) {
         });
     }
     [[NSBundle bundleWithPath:[NSString stringWithFormat:@"%@/Frameworks/Module_Framework.framework", NSBundle.mainBundle.bundlePath]] load];
-    localizedDislikeText = _LOC([NSBundle mainBundle], @"offline.dislike");
+    localizedDislikeText = [RYDBundle() localizedStringForKey:@"DISLIKES"
+        value:_LOC([NSBundle mainBundle], @"offline.dislike") table:nil];
     %init;
 }

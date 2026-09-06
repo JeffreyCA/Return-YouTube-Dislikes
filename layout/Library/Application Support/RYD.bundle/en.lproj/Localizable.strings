@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Return YouTube Dislike";
+"DISLIKES" = "Dislikes";
+"DISLIKES_COUNT_FORMAT" = "%@ dislikes";
 
 "ENABLED" = "Enabled";
 "ENABLE_VOTE_SUBMIT" = "Enable vote submission";
