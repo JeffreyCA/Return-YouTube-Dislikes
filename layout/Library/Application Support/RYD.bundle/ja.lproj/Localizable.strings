@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Return YouTube Dislike";
+"DISLIKES" = "低評価";
+"DISLIKES_COUNT_FORMAT" = "%@ 件の低評価";
 
 "ENABLED" = "有効";
 "ENABLE_VOTE_SUBMIT" = "評価の送信を許可";

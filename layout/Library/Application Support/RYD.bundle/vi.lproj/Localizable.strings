@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Return YouTube Dislike";
+"DISLIKES" = "Không thích";
+"DISLIKES_COUNT_FORMAT" = "%@ lượt không thích";
 
 "ENABLED" = "Kích hoạt";
 "ENABLE_VOTE_SUBMIT" = "Chia sẻ dữ liệu về lượt thích/không thích";

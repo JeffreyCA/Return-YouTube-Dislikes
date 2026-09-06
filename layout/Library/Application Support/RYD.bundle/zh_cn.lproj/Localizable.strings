@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Return YouTube Dislike";
+"DISLIKES" = "踩";
+"DISLIKES_COUNT_FORMAT" = "%@ 次踩";
 
 "ENABLED" = "启用";
 "ENABLE_VOTE_SUBMIT" = "上传顶/踩数据";

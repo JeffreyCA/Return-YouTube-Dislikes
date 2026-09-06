@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Return YouTube Dislike";
+"DISLIKES" = "Dislike-ok";
+"DISLIKES_COUNT_FORMAT" = "%@ dislike";
 
 "ENABLED" = "Engedélyezve";
 "ENABLE_VOTE_SUBMIT" = "Szavazatküldés engedélyezése";

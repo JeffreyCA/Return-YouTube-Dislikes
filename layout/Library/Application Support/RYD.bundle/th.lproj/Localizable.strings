@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "คืนค่าไม่ชอบใน YouTube";
+"DISLIKES" = "ไม่ชอบ";
+"DISLIKES_COUNT_FORMAT" = "ไม่ชอบ %@ ครั้ง";
 
 "ENABLED" = "เปิดใช้งาน";
 "ENABLE_VOTE_SUBMIT" = "เปิดใช้งานการส่งคะแนน";

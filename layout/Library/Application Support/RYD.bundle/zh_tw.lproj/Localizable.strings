@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Return YouTube Dislike";
+"DISLIKES" = "不喜歡";
+"DISLIKES_COUNT_FORMAT" = "%@ 個不喜歡";
 
 "ENABLED" = "啟用";
 "ENABLE_VOTE_SUBMIT" = "將按下\"讚/爛\"上傳";

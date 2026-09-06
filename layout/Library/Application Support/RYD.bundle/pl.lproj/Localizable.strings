@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Przywróć łapki w dół";
+"DISLIKES" = "Niepolubienia";
+"DISLIKES_COUNT_FORMAT" = "%@ niepolubień";
 
 "ENABLED" = "Włączone";
 "ENABLE_VOTE_SUBMIT" = "Włącz przesyłanie głosów";

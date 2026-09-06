@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Return YouTube Dislike";
+"DISLIKES" = "Beğenmeme";
+"DISLIKES_COUNT_FORMAT" = "%@ beğenmeme";
 
 "ENABLED" = "Etkinleştir";
 "ENABLE_VOTE_SUBMIT" = "Oy gönderimini etkinleştir";

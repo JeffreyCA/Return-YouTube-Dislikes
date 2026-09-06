@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Return YouTube Dislike";
+"DISLIKES" = "Дизлайки";
+"DISLIKES_COUNT_FORMAT" = "%@ дизлайков";
 
 "ENABLED" = "Активировать";
 "ENABLE_VOTE_SUBMIT" = "Включить отправку голосов";

@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Return YouTube Dislike";
+"DISLIKES" = "Nu aprecieri";
+"DISLIKES_COUNT_FORMAT" = "%@ nu aprecieri";
 
 "ENABLED" = "Enabled";
 "ENABLE_VOTE_SUBMIT" = "Activați trimiterea voturilor";

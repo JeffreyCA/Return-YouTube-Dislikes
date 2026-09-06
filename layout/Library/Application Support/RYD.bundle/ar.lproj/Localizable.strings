@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Return YouTube Dislike";
+"DISLIKES" = "عدم الإعجاب";
+"DISLIKES_COUNT_FORMAT" = "%@ عدم إعجاب";
 
 "ENABLED" = "مفعَّل";
 "ENABLE_VOTE_SUBMIT" = "تفعيل إرسال التصويت";

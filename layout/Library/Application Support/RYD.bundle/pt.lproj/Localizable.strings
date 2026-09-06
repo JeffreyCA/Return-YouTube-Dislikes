@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Return YouTube Dislike";
+"DISLIKES" = "Não gostei";
+"DISLIKES_COUNT_FORMAT" = "%@ não gostei";
 
 "ENABLED" = "Ativado";
 "ENABLE_VOTE_SUBMIT" = "Ativar envio de votos";

@@ -1,4 +1,6 @@
 "SETTINGS_TITLE" = "Return YouTube Dislike";
+"DISLIKES" = "Tidak suka";
+"DISLIKES_COUNT_FORMAT" = "%@ tidak suka";
 
 "ENABLED" = "Diaktifkan";
 "ENABLE_VOTE_SUBMIT" = "Aktifkan pengiriman voting";
